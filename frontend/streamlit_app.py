@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import io
-import os
 
 st.set_page_config(
     page_title="Walmart Demand Forecasting",
@@ -41,14 +40,25 @@ st.title("Walmart Demand Forecasting")
 
 @st.cache_data
 def load_data():
-    if "csv_data" in st.secrets:
-        df = pd.read_csv(io.StringIO(st.secrets["csv_data"]))
-    else:
-        df = pd.read_csv("data/raw/store_history.csv")
+    try:
+        if "csv_data" in st.secrets and st.secrets["csv_data"].strip():
+            df = pd.read_csv(io.StringIO(st.secrets["csv_data"]))
+        else:
+            st.error("csv_data not found in Streamlit secrets.")
+            return None
 
-    df.columns = df.columns.str.strip()
-    df["Date"] = pd.to_datetime(df["Date"], dayfirst=True)
-    return df
+        df.columns = df.columns.str.strip()
+        df["Date"] = pd.to_datetime(df["Date"], dayfirst=True)
+        return df
+
+    except Exception as e:
+        st.error(f"Failed to load data: {e}")
+        return None
+
+df = load_data()
+if df is None:
+    st.stop()
+
 # ---------------- SIDEBAR ----------------
 st.sidebar.header("Input Parameters")
 
@@ -61,25 +71,10 @@ store_id = st.sidebar.number_input(
 
 holiday_flag = st.sidebar.toggle("Holiday Week")
 
-temperature = st.sidebar.slider(
-    "Temperature (°F)",
-    20.0, 120.0, 70.0
-)
-
-fuel_price = st.sidebar.slider(
-    "Fuel Price ($/gal)",
-    2.0, 5.0, 3.5
-)
-
-cpi = st.sidebar.slider(
-    "CPI",
-    200.0, 300.0, 220.0
-)
-
-unemployment = st.sidebar.slider(
-    "Unemployment Rate (%)",
-    3.0, 15.0, 7.0
-)
+temperature = st.sidebar.slider("Temperature (°F)", 20.0, 120.0, 70.0)
+fuel_price = st.sidebar.slider("Fuel Price ($/gal)", 2.0, 5.0, 3.5)
+cpi = st.sidebar.slider("CPI", 200.0, 300.0, 220.0)
+unemployment = st.sidebar.slider("Unemployment Rate (%)", 3.0, 15.0, 7.0)
 
 # ---------------- MODEL ----------------
 store_df = df[df["Store"] == store_id].sort_values("Date")
@@ -97,17 +92,14 @@ TEMP_CURVATURE = -196.8391
 def temperature_effect(t):
     return TEMP_CURVATURE * (t - TEMP_OPTIMAL) ** 2
 
-def predict_sales():
-    return (
-        CONST
-        + COEF_HOLIDAY * int(holiday_flag)
-        + temperature_effect(temperature)
-        + COEF_FUEL * fuel_price
-        + COEF_CPI * cpi
-        + COEF_UNEMP * unemployment
-    )
-
-predicted_sales = predict_sales()
+predicted_sales = (
+    CONST
+    + COEF_HOLIDAY * int(holiday_flag)
+    + temperature_effect(temperature)
+    + COEF_FUEL * fuel_price
+    + COEF_CPI * cpi
+    + COEF_UNEMP * unemployment
+)
 
 # ---------------- KPI SECTION ----------------
 st.markdown('<div class="section"></div>', unsafe_allow_html=True)
@@ -162,38 +154,5 @@ ax.grid(alpha=0.3)
 ax.yaxis.set_major_formatter('${x:,.0f}')
 
 st.pyplot(fig, use_container_width=True)
-
-# ---------------- SENSITIVITY ----------------
-st.markdown('<div class="section"></div>', unsafe_allow_html=True)
-st.subheader("Feature Sensitivity")
-
-features = [
-    ("Temperature", np.linspace(20, 120, 80),
-     lambda x: CONST + COEF_HOLIDAY * int(holiday_flag)
-               + temperature_effect(x)
-               + COEF_FUEL * fuel_price
-               + COEF_CPI * cpi
-               + COEF_UNEMP * unemployment),
-
-    ("Fuel Price", np.linspace(2, 5, 50),
-     lambda x: predict_sales() + COEF_FUEL * (x - fuel_price)),
-
-    ("CPI", np.linspace(200, 300, 50),
-     lambda x: predict_sales() + COEF_CPI * (x - cpi)),
-
-    ("Unemployment", np.linspace(3, 15, 50),
-     lambda x: predict_sales() + COEF_UNEMP * (x - unemployment)),
-]
-
-cols = st.columns(2)
-
-for i, (label, rng, fn) in enumerate(features):
-    with cols[i % 2]:
-        fig, ax = plt.subplots(figsize=(5, 3))
-        ax.plot(rng, [fn(v) for v in rng])
-        ax.set_title(label)
-        ax.grid(alpha=0.3)
-        ax.yaxis.set_major_formatter('${x:,.0f}')
-        st.pyplot(fig, use_container_width=True)
 
 st.caption("Walmart Demand Forecasting")
