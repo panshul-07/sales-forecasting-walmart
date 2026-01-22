@@ -1,24 +1,24 @@
-# ---- Python ----
+# Data
+data/
+data/raw/
+data/processed/
+*.csv
+
+# Models
+*.pkl
+
+# Python
 __pycache__/
-*.py[cod]
-*.pyo
-*.pyd
+*.pyc
+.ipynb_checkpoints/
 
-# ---- Virtual Environments ----
+# Virtual environment
 venv/
-.env/
 
-
-
-# ---- Results & Outputs ----
-results/
-pp/
-
-# ---- Backups ----
-Walmart_Project_backup/
-
-# ---- OS ----
+# OS
 .DS_Store
 
 
-data/store_history.csv
+*.csv
+notebooks/walmart_demand_model.pkl
+notebooks/store_history.csv
