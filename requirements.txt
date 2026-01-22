@@ -1,3 +1,6 @@
+plotly==5.15.0
+kaleido==0.2.1
+
 altair==6.0.0
 annotated-doc==0.0.4
 annotated-types==0.7.0
@@ -135,4 +138,5 @@ webencodings==0.5.1
 websocket-client==1.9.0
 widgetsnbextension==4.0.15
 xgboost==3.1.2
-plotly==5.15.0
+
+--prefer-binary
