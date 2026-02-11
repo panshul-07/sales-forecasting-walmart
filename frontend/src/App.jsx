@@ -3,32 +3,37 @@ import axios from 'axios'
 import Plot from 'react-plotly.js'
 
 const rawApiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
-const API_BASE = rawApiBase.startsWith('http://') || rawApiBase.startsWith('https://')
-  ? rawApiBase
-  : `https://${rawApiBase}`
+const API_BASE = rawApiBase.startsWith('http://') || rawApiBase.startsWith('https://') ? rawApiBase : `https://${rawApiBase}`
 
 const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
 const number = new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 })
 
-function Kpi({ label, value }) {
+const NOTEBOOK_URL = 'https://github.com/panshul-07/sales-forecasting-walmart/tree/main/notebooks'
+
+function KpiCard({ label, value, hint }) {
   return (
-    <div className="kpi-card">
-      <div className="kpi-label">{label}</div>
-      <div className="kpi-value">{value}</div>
-    </div>
+    <article className="kpi-card">
+      <p className="kpi-label">{label}</p>
+      <p className="kpi-value">{value}</p>
+      {hint ? <p className="kpi-hint">{hint}</p> : null}
+    </article>
   )
 }
 
 export default function App() {
   const [stores, setStores] = useState([])
   const [store, setStore] = useState('')
-  const [metrics, setMetrics] = useState({})
-  const [diagnostics, setDiagnostics] = useState({})
-  const [modelInfo, setModelInfo] = useState(null)
-  const [history, setHistory] = useState([])
   const [feature, setFeature] = useState('Temperature')
+
+  const [metrics, setMetrics] = useState({})
+  const [modelInfo, setModelInfo] = useState(null)
+
+  const [history, setHistory] = useState([])
   const [sensitivity, setSensitivity] = useState([])
+
   const [prediction, setPrediction] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
@@ -41,8 +46,9 @@ export default function App() {
 
   async function loadBootstrap() {
     const { data } = await axios.get(`${API_BASE}/api/v1/bootstrap`)
-    setStores(Array.isArray(data?.stores) ? data.stores : [])
-    setStore(data?.default_store ? String(data.default_store) : '')
+    const storeList = Array.isArray(data?.stores) ? data.stores : []
+    setStores(storeList)
+    setStore(data?.default_store ? String(data.default_store) : String(storeList[0] || ''))
     setMetrics(data?.metrics || {})
   }
 
@@ -53,243 +59,288 @@ export default function App() {
 
   async function loadMetrics() {
     const { data } = await axios.get(`${API_BASE}/api/v1/metrics`)
-    setMetrics(data.metrics)
-    setDiagnostics(data.diagnostics)
+    setMetrics(data?.metrics || {})
   }
 
   async function loadHistory(selectedStore) {
     const { data } = await axios.get(`${API_BASE}/api/v1/store/${selectedStore}/history?limit=52`)
-    setHistory(data.points)
+    setHistory(Array.isArray(data?.points) ? data.points : [])
   }
 
   async function loadSensitivity(selectedStore, selectedFeature) {
     const { data } = await axios.get(`${API_BASE}/api/v1/store/${selectedStore}/sensitivity?feature=${selectedFeature}`)
-    setSensitivity(data.points)
+    setSensitivity(Array.isArray(data?.points) ? data.points : [])
+  }
+
+  async function initialize() {
+    setLoading(true)
+    setError('')
+    try {
+      await loadBootstrap()
+      await Promise.all([loadModelInfo(), loadMetrics()])
+    } catch (err) {
+      setError('Unable to load API data. Check frontend env var VITE_API_BASE_URL and backend service status.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function runTrain() {
-    await axios.post(`${API_BASE}/api/v1/train`)
-    await loadMetrics()
-    if (store) {
-      await loadHistory(store)
-      await loadSensitivity(store, feature)
+    try {
+      setError('')
+      await axios.post(`${API_BASE}/api/v1/train`)
+      await loadMetrics()
+      if (store) {
+        await Promise.all([loadHistory(store), loadSensitivity(store, feature)])
+      }
+    } catch (err) {
+      setError('Model retraining failed. Try again after backend is fully live.')
     }
   }
 
   async function runPredict(e) {
     e.preventDefault()
-    const payload = {
-      ...form,
-      store: Number(store),
-      holiday_flag: Number(form.holiday_flag),
-      temperature: Number(form.temperature),
-      fuel_price: Number(form.fuel_price),
-      cpi: Number(form.cpi),
-      unemployment: Number(form.unemployment),
+    if (!store) return
+
+    try {
+      setError('')
+      const payload = {
+        ...form,
+        store: Number(store),
+        holiday_flag: Number(form.holiday_flag),
+        temperature: Number(form.temperature),
+        fuel_price: Number(form.fuel_price),
+        cpi: Number(form.cpi),
+        unemployment: Number(form.unemployment),
+      }
+      const { data } = await axios.post(`${API_BASE}/api/v1/predict`, payload)
+      setPrediction(data?.predicted_sales ?? null)
+    } catch (err) {
+      setError('Prediction failed. Please verify API connectivity and try again.')
     }
-    const { data } = await axios.post(`${API_BASE}/api/v1/predict`, payload)
-    setPrediction(data.predicted_sales)
   }
 
   useEffect(() => {
-    loadBootstrap().then(loadMetrics)
-    loadModelInfo()
+    initialize()
   }, [])
 
   useEffect(() => {
     if (!store) return
-    loadHistory(store)
-    loadSensitivity(store, feature)
+    loadHistory(store).catch(() => setError('Could not load store history.'))
+    loadSensitivity(store, feature).catch(() => setError('Could not load sensitivity data.'))
   }, [store, feature])
 
-  const historyTrace = useMemo(
+  const historyAverage = useMemo(() => {
+    if (!history.length) return 0
+    const sum = history.reduce((acc, p) => acc + Number(p.actual_sales || 0), 0)
+    return sum / history.length
+  }, [history])
+
+  const changeVsAverage = useMemo(() => {
+    if (!prediction || !historyAverage) return null
+    return ((prediction - historyAverage) / historyAverage) * 100
+  }, [prediction, historyAverage])
+
+  const historyPlot = useMemo(
     () => [
       {
         x: history.map((p) => p.date),
         y: history.map((p) => p.actual_sales),
         type: 'scatter',
         mode: 'lines+markers',
-        name: 'Actual',
-        line: { color: '#0A9396', width: 2 },
+        name: 'Actual Sales',
+        line: { color: '#0F766E', width: 3 },
+        marker: { size: 5, color: '#14B8A6' },
       },
       {
         x: history.map((p) => p.date),
         y: history.map((p) => p.predicted_sales),
         type: 'scatter',
         mode: 'lines',
-        name: 'Predicted',
-        line: { color: '#EE9B00', width: 2, dash: 'dash' },
+        name: 'Model Fit',
+        line: { color: '#F59E0B', width: 3, dash: 'dash' },
       },
     ],
     [history]
   )
 
-  const sensitivityTrace = useMemo(
+  const sensitivityPlot = useMemo(
     () => [
       {
         x: sensitivity.map((p) => p.x),
         y: sensitivity.map((p) => p.y),
         type: 'scatter',
         mode: 'lines',
-        line: { color: '#BB3E03', width: 3 },
+        name: `${feature} sensitivity`,
+        line: { color: '#7C3AED', width: 3 },
         fill: 'tozeroy',
-        fillcolor: 'rgba(187, 62, 3, 0.15)',
+        fillcolor: 'rgba(124,58,237,0.14)',
       },
     ],
-    [sensitivity]
+    [sensitivity, feature]
   )
 
-  const diagnosticHeatmap = useMemo(() => {
-    const labels = ['JB p', 'Shapiro p', 'BP p', 'BG p', 'Ljung-Box p', 'RESET p']
-    const values = [
-      diagnostics?.normality?.jarque_bera_p ?? 0,
-      diagnostics?.normality?.shapiro_p ?? 0,
-      diagnostics?.heteroskedasticity?.breusch_pagan_p ?? 0,
-      diagnostics?.autocorrelation?.breusch_godfrey_p ?? 0,
-      diagnostics?.autocorrelation?.ljung_box_p_lag10 ?? 0,
-      diagnostics?.specification?.ramsey_reset_p ?? 0,
-    ]
-    return [
-      {
-        z: [values.map((v) => Math.min(6, Math.max(0, -Math.log10(Math.max(v, 1e-12)))))],
-        x: labels,
-        y: ['-log10(p-value)'],
-        type: 'heatmap',
-        colorscale: 'YlOrRd',
-        zmin: 0,
-        zmax: 6,
-      },
-    ]
-  }, [diagnostics])
-
   return (
-    <main>
-      <header>
-        <h1>Walmart Sales Forecasting</h1>
-        <p>FastAPI + React + Plotly dashboard with robust diagnostics, model transparency, and scenario forecasting.</p>
-      </header>
+    <main className="app-shell">
+      <section className="hero">
+        <div>
+          <p className="eyebrow">Walmart Forecast Studio</p>
+          <h1>Sales Forecasting Dashboard</h1>
+          <p className="hero-text">
+            Clean forecasting UI for business presentation. Statistical validation and test evidence are documented in notebooks.
+          </p>
+        </div>
+        <div className="hero-actions">
+          <button className="btn btn-secondary" onClick={initialize}>Refresh Data</button>
+          <button className="btn" onClick={runTrain}>Retrain Model</button>
+        </div>
+      </section>
 
-      <section className="toolbar">
+      {error ? <div className="alert">{error}</div> : null}
+
+      <section className="control-panel">
         <label>
           Store
-          <select value={store} onChange={(e) => setStore(e.target.value)}>
+          <select value={store} onChange={(e) => setStore(e.target.value)} disabled={loading || stores.length === 0}>
+            {stores.length === 0 ? <option value="">No stores loaded</option> : null}
             {stores.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
+              <option key={s} value={s}>{s}</option>
             ))}
           </select>
         </label>
+
         <label>
-          Sensitivity
+          Sensitivity Variable
           <select value={feature} onChange={(e) => setFeature(e.target.value)}>
             {['Temperature', 'Fuel_Price', 'CPI', 'Unemployment'].map((f) => (
-              <option key={f} value={f}>
-                {f}
-              </option>
+              <option key={f} value={f}>{f}</option>
             ))}
           </select>
         </label>
-        <button onClick={runTrain}>Retrain Model</button>
+
+        <a className="btn btn-ghost" href={NOTEBOOK_URL} target="_blank" rel="noreferrer">
+          Open Notebook Evidence
+        </a>
       </section>
 
       <section className="kpi-grid">
-        <Kpi label="Ensemble Test R2" value={number.format(metrics.ensemble_test_r2 || 0)} />
-        <Kpi label="Ensemble RMSE" value={currency.format(metrics.ensemble_test_rmse || 0)} />
-        <Kpi label="OLS Test R2" value={number.format(metrics.ols_test_r2 || 0)} />
-        <Kpi label="Predicted Sales" value={currency.format(prediction || 0)} />
-      </section>
-
-      <section className="panel two-col">
-        <div>
-          <h2>Model Used</h2>
-          <ul className="diag-list">
-            <li>Forecast model: {modelInfo?.forecast_model?.name || 'VotingRegressor'}</li>
-            <li>Ensemble members: {(modelInfo?.forecast_model?.members || []).join(', ')}</li>
-            <li>Interpretability model: {modelInfo?.interpretable_model?.name || 'OLS'}</li>
-            <li>Target transform: {modelInfo?.interpretable_model?.target_transform || 'log1p(Weekly_Sales)'}</li>
-            <li>Robust errors: {modelInfo?.interpretable_model?.robust_errors || 'HC3'}</li>
-          </ul>
-        </div>
-        <div>
-          <h2>Diagnostic Heatmap</h2>
-          <Plot
-            data={diagnosticHeatmap}
-            layout={{ margin: { t: 20, r: 10, b: 70, l: 50 }, paper_bgcolor: '#001219', plot_bgcolor: '#001219', font: { color: '#E9D8A6' } }}
-            useResizeHandler
-            style={{ width: '100%', height: '260px' }}
-            config={{ responsive: true }}
-          />
-        </div>
-      </section>
-
-      <section className="panel">
-        <h2>Store History: Actual vs Predicted</h2>
-        <Plot
-          data={historyTrace}
-          layout={{ margin: { t: 20, r: 10, b: 40, l: 60 }, paper_bgcolor: '#001219', plot_bgcolor: '#001219', font: { color: '#E9D8A6' } }}
-          useResizeHandler
-          style={{ width: '100%', height: '360px' }}
-          config={{ responsive: true }}
+        <KpiCard label="Ensemble R2" value={number.format(metrics.ensemble_test_r2 || 0)} hint="Holdout accuracy" />
+        <KpiCard label="Ensemble RMSE" value={currency.format(metrics.ensemble_test_rmse || 0)} hint="Prediction error" />
+        <KpiCard label="Current Forecast" value={currency.format(prediction || 0)} hint="From form inputs" />
+        <KpiCard
+          label="Change vs Store Avg"
+          value={changeVsAverage === null ? '—' : `${changeVsAverage.toFixed(2)}%`}
+          hint={historyAverage ? `Store avg ${currency.format(historyAverage)}` : 'Run/load predictions'}
         />
       </section>
 
-      <section className="panel two-col">
-        <div>
-          <h2>{feature} Sensitivity</h2>
+      <section className="grid-two">
+        <article className="panel">
+          <div className="panel-head">
+            <h2>Store History</h2>
+            <p>Actual vs model fit (last 52 weeks)</p>
+          </div>
           <Plot
-            data={sensitivityTrace}
-            layout={{ margin: { t: 20, r: 10, b: 40, l: 60 }, paper_bgcolor: '#001219', plot_bgcolor: '#001219', font: { color: '#E9D8A6' } }}
+            data={historyPlot}
+            layout={{
+              margin: { t: 10, r: 12, b: 40, l: 56 },
+              paper_bgcolor: 'rgba(0,0,0,0)',
+              plot_bgcolor: 'rgba(0,0,0,0)',
+              font: { color: '#E2E8F0' },
+              xaxis: { gridcolor: 'rgba(148,163,184,0.2)' },
+              yaxis: { gridcolor: 'rgba(148,163,184,0.2)' },
+              legend: { orientation: 'h' },
+            }}
             useResizeHandler
-            style={{ width: '100%', height: '320px' }}
-            config={{ responsive: true }}
+            style={{ width: '100%', height: '360px' }}
+            config={{ responsive: true, displayModeBar: false }}
           />
-        </div>
-        <div>
-          <h2>OLS Diagnostic Highlights</h2>
-          <ul className="diag-list">
-            <li>Jarque-Bera p: {number.format(diagnostics?.normality?.jarque_bera_p || 0)}</li>
-            <li>Kurtosis: {number.format(diagnostics?.normality?.residual_kurtosis || 0)}</li>
-            <li>Breusch-Pagan p: {number.format(diagnostics?.heteroskedasticity?.breusch_pagan_p || 0)}</li>
-            <li>Durbin-Watson: {number.format(diagnostics?.autocorrelation?.durbin_watson || 0)}</li>
-            <li>RESET p: {number.format(diagnostics?.specification?.ramsey_reset_p || 0)}</li>
-            <li>Shapiro p: {number.format(diagnostics?.normality?.shapiro_p || 0)}</li>
-          </ul>
-        </div>
+        </article>
+
+        <article className="panel">
+          <div className="panel-head">
+            <h2>{feature} Sensitivity</h2>
+            <p>How forecast responds to macro changes</p>
+          </div>
+          <Plot
+            data={sensitivityPlot}
+            layout={{
+              margin: { t: 10, r: 12, b: 40, l: 56 },
+              paper_bgcolor: 'rgba(0,0,0,0)',
+              plot_bgcolor: 'rgba(0,0,0,0)',
+              font: { color: '#E2E8F0' },
+              xaxis: { gridcolor: 'rgba(148,163,184,0.2)' },
+              yaxis: { gridcolor: 'rgba(148,163,184,0.2)' },
+            }}
+            useResizeHandler
+            style={{ width: '100%', height: '360px' }}
+            config={{ responsive: true, displayModeBar: false }}
+          />
+        </article>
       </section>
 
-      <section className="panel">
-        <h2>Single Prediction</h2>
-        <form className="predict-grid" onSubmit={runPredict}>
-          <label>
-            Date
-            <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-          </label>
-          <label>
-            Holiday Flag
-            <select value={form.holiday_flag} onChange={(e) => setForm({ ...form, holiday_flag: e.target.value })}>
-              <option value={0}>0</option>
-              <option value={1}>1</option>
-            </select>
-          </label>
-          <label>
-            Temperature
-            <input type="number" value={form.temperature} onChange={(e) => setForm({ ...form, temperature: e.target.value })} />
-          </label>
-          <label>
-            Fuel Price
-            <input type="number" step="0.01" value={form.fuel_price} onChange={(e) => setForm({ ...form, fuel_price: e.target.value })} />
-          </label>
-          <label>
-            CPI
-            <input type="number" value={form.cpi} onChange={(e) => setForm({ ...form, cpi: e.target.value })} />
-          </label>
-          <label>
-            Unemployment
-            <input type="number" step="0.01" value={form.unemployment} onChange={(e) => setForm({ ...form, unemployment: e.target.value })} />
-          </label>
-          <button type="submit">Run Prediction</button>
-        </form>
+      <section className="grid-two">
+        <article className="panel">
+          <div className="panel-head">
+            <h2>Forecast Inputs</h2>
+            <p>Scenario simulator</p>
+          </div>
+          <form className="predict-grid" onSubmit={runPredict}>
+            <label>
+              Date
+              <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+            </label>
+            <label>
+              Holiday Flag
+              <select value={form.holiday_flag} onChange={(e) => setForm({ ...form, holiday_flag: e.target.value })}>
+                <option value={0}>0</option>
+                <option value={1}>1</option>
+              </select>
+            </label>
+            <label>
+              Temperature
+              <input type="number" value={form.temperature} onChange={(e) => setForm({ ...form, temperature: e.target.value })} />
+            </label>
+            <label>
+              Fuel Price
+              <input type="number" step="0.01" value={form.fuel_price} onChange={(e) => setForm({ ...form, fuel_price: e.target.value })} />
+            </label>
+            <label>
+              CPI
+              <input type="number" value={form.cpi} onChange={(e) => setForm({ ...form, cpi: e.target.value })} />
+            </label>
+            <label>
+              Unemployment
+              <input type="number" step="0.01" value={form.unemployment} onChange={(e) => setForm({ ...form, unemployment: e.target.value })} />
+            </label>
+            <button className="btn" type="submit" disabled={!store}>Run Forecast</button>
+          </form>
+        </article>
+
+        <article className="panel">
+          <div className="panel-head">
+            <h2>Model Summary</h2>
+            <p>Frontend keeps this concise. Full tests remain in notebooks.</p>
+          </div>
+          <div className="chips">
+            <span className="chip">{modelInfo?.forecast_model?.name || 'VotingRegressor'}</span>
+            {(modelInfo?.forecast_model?.members || []).map((m) => (
+              <span className="chip" key={m}>{m}</span>
+            ))}
+            <span className="chip">{modelInfo?.interpretable_model?.name || 'OLS'}</span>
+            <span className="chip">{modelInfo?.interpretable_model?.target_transform || 'log1p'}</span>
+            <span className="chip">{modelInfo?.interpretable_model?.robust_errors || 'HC3'}</span>
+          </div>
+
+          <p className="model-note">
+            Parametric tests (JB, Shapiro, BG, BP, RESET and others), preprocessing steps, and evidence outputs are documented in the
+            notebooks folder for submission.
+          </p>
+
+          <a className="btn btn-secondary" href={NOTEBOOK_URL} target="_blank" rel="noreferrer">
+            View Notebook + Outputs
+          </a>
+        </article>
       </section>
     </main>
   )
