@@ -1,26 +1,20 @@
-# Data
-data/
-data/raw/
-data/processed/
-*.csv
-
-# Models
-*.pkl
-
 # Python
 __pycache__/
 *.pyc
+.venv/
+venv/
 .ipynb_checkpoints/
 
-# Virtual environment
-venv/
+# Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Data and artifacts
+artifacts/*.joblib
+artifacts/*.pkl
+data/raw/
+data/processed/
 
 # OS
 .DS_Store
-
-
-*.csv
-notebooks/walmart_demand_model.pkl
-notebooks/store_history.csv
-
-Walmart_Project_backup/

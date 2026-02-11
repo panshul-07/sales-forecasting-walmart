@@ -1,153 +1,112 @@
+# Walmart Sales Forecasting (FastAPI + React + Plotly)
 
+This project was refactored into a clean full-stack architecture with:
+- `backend/` for model training, diagnostics, and forecasting APIs
+- `frontend/` for an interactive React + Plotly dashboard
+- `data/` for dataset files (`walmart_sales.csv`)
+- `artifacts/` for trained model bundles
+- `legacy/` for previous notebook + Streamlit code
 
-## To install and run,
-* run in a terminal of your choice 
+## Why this fixes the OLS issues
 
-    ```bash
-    pip install -r requirements.txt
-    ```
+The previous implementation had weak statistical validation and unstable normality behavior (high kurtosis / poor JB results). The new pipeline improves this through:
+- feature engineering with lags + rolling windows + seasonality terms
+- outlier clipping (IQR)
+- log-transformed OLS target (`log1p(Weekly_Sales)`)
+- robust covariance (`HC3`) for OLS
+- expanded parametric diagnostics
 
-* then run 
-     ```bash
-     streamlit run frontend/streamlit_app.py
-     ```
- 
- # Walmart Demand Forecasting System
+### Added validation tests
+- Jarque-Bera
+- Omnibus
+- Shapiro-Wilk
+- D'Agostino K2
+- Breusch-Pagan
+- Durbin-Watson
+- Breusch-Godfrey
+- Ljung-Box
+- Ramsey RESET
+- one-sample t-test on residual mean
+- VIF per feature
 
-## Project Overview
+## Folder Structure
 
-This project implements an interactive demand forecasting system for Walmart stores using an **amalgamated ensemble of machine learning models** combined with a **Streamlit-based analytical dashboard**.
+```text
+.
+├── backend/
+│   ├── app/
+│   │   ├── main.py
+│   │   ├── schemas.py
+│   │   └── services/
+│   ├── requirements.txt
+│   └── Dockerfile
+├── frontend/
+│   ├── src/
+│   ├── package.json
+│   └── Dockerfile
+├── data/
+├── artifacts/
+├── scripts/train_model.py
+├── docker-compose.yml
+├── render.yaml
+└── legacy/
+```
 
-The system predicts **weekly sales** for individual Walmart stores and allows users to analyze how external and economic factors influence demand. The project emphasizes **accuracy, interpretability, and deployment readiness**, making it suitable for academic evaluation and real-world retail analytics use cases.
+## Dataset
 
----
+If `data/walmart_sales.csv` exists, it is used automatically.
+If not, the backend generates a realistic synthetic Walmart-like dataset so the project still runs end-to-end.
 
-## Objectives
+## Local Run
 
-- Forecast weekly sales using ensemble machine learning
-- Capture non-linear demand patterns in retail data
-- Provide interpretable sensitivity analysis
-- Build an interactive business-style dashboard
-- Deploy the application on Streamlit Cloud
+### 1. Backend
 
----
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+python scripts/train_model.py
+uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
+```
 
-## Model Architecture
+API docs: `http://localhost:8000/docs`
 
-The forecasting engine is built using an **amalgamated ensemble regression approach** that combines multiple tree-based models to improve generalization and robustness.
+### 2. Frontend
 
-### Models Used
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-#### XGBoost Regressor
-- Captures complex non-linear feature interactions
-- Performs exceptionally well on structured tabular data
-- Includes regularization to prevent overfitting
+Frontend: `http://localhost:5173`
 
-#### Random Forest Regressor
-- Uses bagging to reduce variance
-- Produces stable baseline predictions
-- Handles noisy retail data effectively
+Set API base if needed:
 
-#### Gradient Boosting Regressor
-- Learns from residual errors iteratively
-- Improves accuracy over sequential stages
-- Captures subtle demand trends
+```bash
+export VITE_API_BASE_URL="http://localhost:8000"
+```
 
----
+## Docker Run
 
-### Ensemble Strategy
+```bash
+docker compose up --build
+```
 
-Predictions from all models are combined using **averaging (voting regression)**.
+- API: `http://localhost:8000`
+- Web UI: `http://localhost:5173`
 
-Benefits:
-- Reduced bias and variance
-- Improved prediction stability
-- Robust performance across scenarios
+## Deploy on Render
 
-This approach mirrors industry-grade forecasting pipelines used in retail analytics.
+A Blueprint file is included: `render.yaml`
 
----
+Services provisioned:
+- `walmart-sales-api` (Python web service)
+- `walmart-sales-frontend` (Static React site)
 
-## Dataset and Features
+Before deploy, set env vars in Render dashboard:
+- `FRONTEND_URL` on API service
+- `VITE_API_BASE_URL` on static frontend service to your API URL
 
-### Input Features
-
-| Feature | Description |
-|------|------------|
-| Store | Store identifier |
-| Date | Weekly timestamp |
-| Holiday_Flag | Indicates holiday week |
-| Temperature | Average weekly temperature (°F) |
-| Fuel_Price | Fuel cost per gallon |
-| CPI | Consumer Price Index |
-| Unemployment | National unemployment rate |
-
----
-
-## Feature Engineering
-
-### Temperature Effect Modeling
-
-Temperature impact is modeled using a **parabolic (quadratic) function**:
-
-- Sales peak at an optimal temperature (~70°F)
-- Extremely low or high temperatures reduce demand
-- Reflects realistic consumer behavior
-
-This improves realism over linear assumptions.
-
----
-
-## Streamlit Dashboard Components
-
-### KPI Cards
-- Predicted Weekly Sales
-- Average Store Sales
-- Percentage Change vs Historical Average
-
----
-
-### Recent Sales Trend
-- Displays last 20 weeks of actual sales
-- Overlays predicted sales
-- Validates model behavior visually
-
----
-
-### Sensitivity Analysis
-
-Interactive sensitivity plots for:
-- Temperature
-- Fuel Price
-- CPI
-- Unemployment Rate
-
-Each plot:
-- Shows smooth response curves
-- Highlights the current operating point
-- Enables what-if analysis for decision making
-
----
-
-## UI & Visualization Design
-
-- Compatible with light and dark modes
-- Business-dashboard style layout
-- High-contrast plots for readability
-- Minimal visual clutter
-- Deployment-stable plotting approach
-
----
-
-## Deployment
-
-- Framework: Streamlit
-- Hosting: Streamlit Cloud
-- Secrets Management: Streamlit Secrets (CSV stored securely)
-- Version Control: GitHub
-- Python Version: 3.13
-
----
-
-
+Then deploy using Render Blueprint from repo root.
 
