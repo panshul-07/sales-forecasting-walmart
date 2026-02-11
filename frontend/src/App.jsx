@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import Plot from 'react-plotly.js'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+const rawApiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+const API_BASE = rawApiBase.startsWith('http://') || rawApiBase.startsWith('https://')
+  ? rawApiBase
+  : `https://${rawApiBase}`
 
 const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
 const number = new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 })
@@ -38,9 +41,9 @@ export default function App() {
 
   async function loadBootstrap() {
     const { data } = await axios.get(`${API_BASE}/api/v1/bootstrap`)
-    setStores(data.stores)
-    setStore(String(data.default_store))
-    setMetrics(data.metrics)
+    setStores(Array.isArray(data?.stores) ? data.stores : [])
+    setStore(data?.default_store ? String(data.default_store) : '')
+    setMetrics(data?.metrics || {})
   }
 
   async function loadModelInfo() {
