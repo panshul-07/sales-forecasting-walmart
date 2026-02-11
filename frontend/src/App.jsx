@@ -5,7 +5,7 @@ import Plot from 'react-plotly.js'
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
-const number = new Intl.NumberFormat('en-US', { maximumFractionDigits: 3 })
+const number = new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 })
 
 function Kpi({ label, value }) {
   return (
@@ -21,6 +21,7 @@ export default function App() {
   const [store, setStore] = useState('')
   const [metrics, setMetrics] = useState({})
   const [diagnostics, setDiagnostics] = useState({})
+  const [modelInfo, setModelInfo] = useState(null)
   const [history, setHistory] = useState([])
   const [feature, setFeature] = useState('Temperature')
   const [sensitivity, setSensitivity] = useState([])
@@ -40,6 +41,11 @@ export default function App() {
     setStores(data.stores)
     setStore(String(data.default_store))
     setMetrics(data.metrics)
+  }
+
+  async function loadModelInfo() {
+    const { data } = await axios.get(`${API_BASE}/api/v1/model-info`)
+    setModelInfo(data)
   }
 
   async function loadMetrics() {
@@ -84,6 +90,7 @@ export default function App() {
 
   useEffect(() => {
     loadBootstrap().then(loadMetrics)
+    loadModelInfo()
   }, [])
 
   useEffect(() => {
@@ -129,11 +136,34 @@ export default function App() {
     [sensitivity]
   )
 
+  const diagnosticHeatmap = useMemo(() => {
+    const labels = ['JB p', 'Shapiro p', 'BP p', 'BG p', 'Ljung-Box p', 'RESET p']
+    const values = [
+      diagnostics?.normality?.jarque_bera_p ?? 0,
+      diagnostics?.normality?.shapiro_p ?? 0,
+      diagnostics?.heteroskedasticity?.breusch_pagan_p ?? 0,
+      diagnostics?.autocorrelation?.breusch_godfrey_p ?? 0,
+      diagnostics?.autocorrelation?.ljung_box_p_lag10 ?? 0,
+      diagnostics?.specification?.ramsey_reset_p ?? 0,
+    ]
+    return [
+      {
+        z: [values.map((v) => Math.min(6, Math.max(0, -Math.log10(Math.max(v, 1e-12)))))],
+        x: labels,
+        y: ['-log10(p-value)'],
+        type: 'heatmap',
+        colorscale: 'YlOrRd',
+        zmin: 0,
+        zmax: 6,
+      },
+    ]
+  }, [diagnostics])
+
   return (
     <main>
       <header>
         <h1>Walmart Sales Forecasting</h1>
-        <p>FastAPI + React + Plotly dashboard with improved OLS diagnostics and ensemble forecasting.</p>
+        <p>FastAPI + React + Plotly dashboard with robust diagnostics, model transparency, and scenario forecasting.</p>
       </header>
 
       <section className="toolbar">
@@ -165,6 +195,29 @@ export default function App() {
         <Kpi label="Ensemble RMSE" value={currency.format(metrics.ensemble_test_rmse || 0)} />
         <Kpi label="OLS Test R2" value={number.format(metrics.ols_test_r2 || 0)} />
         <Kpi label="Predicted Sales" value={currency.format(prediction || 0)} />
+      </section>
+
+      <section className="panel two-col">
+        <div>
+          <h2>Model Used</h2>
+          <ul className="diag-list">
+            <li>Forecast model: {modelInfo?.forecast_model?.name || 'VotingRegressor'}</li>
+            <li>Ensemble members: {(modelInfo?.forecast_model?.members || []).join(', ')}</li>
+            <li>Interpretability model: {modelInfo?.interpretable_model?.name || 'OLS'}</li>
+            <li>Target transform: {modelInfo?.interpretable_model?.target_transform || 'log1p(Weekly_Sales)'}</li>
+            <li>Robust errors: {modelInfo?.interpretable_model?.robust_errors || 'HC3'}</li>
+          </ul>
+        </div>
+        <div>
+          <h2>Diagnostic Heatmap</h2>
+          <Plot
+            data={diagnosticHeatmap}
+            layout={{ margin: { t: 20, r: 10, b: 70, l: 50 }, paper_bgcolor: '#001219', plot_bgcolor: '#001219', font: { color: '#E9D8A6' } }}
+            useResizeHandler
+            style={{ width: '100%', height: '260px' }}
+            config={{ responsive: true }}
+          />
+        </div>
       </section>
 
       <section className="panel">

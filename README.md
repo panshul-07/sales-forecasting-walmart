@@ -3,6 +3,7 @@
 This project was refactored into a clean full-stack architecture with:
 - `backend/` for model training, diagnostics, and forecasting APIs
 - `frontend/` for an interactive React + Plotly dashboard
+- `notebooks/` for report notebooks with outputs (accuracy, heatmaps, model visuals)
 - `data/` for dataset files (`walmart_sales.csv`)
 - `artifacts/` for trained model bundles
 - `legacy/` for previous notebook + Streamlit code
@@ -14,6 +15,14 @@ This project was refactored into a clean full-stack architecture with:
 - API Docs (after deploy): `https://walmart-sales-api.onrender.com/docs`
 
 If a link returns `404`, trigger a Render redeploy and wait for the first successful build before sharing the URL publicly.
+
+## Models Used
+
+- Forecast model: `VotingRegressor` (ensemble of `RandomForestRegressor` + `GradientBoostingRegressor`)
+- Interpretable model: `OLS` from `statsmodels`
+- OLS target: `log1p(Weekly_Sales)`
+- OLS robust covariance: `HC3`
+- Feature set: store/economic variables + engineered seasonality + lag and rolling features
 
 ## Why this fixes the OLS issues
 
@@ -52,6 +61,10 @@ The previous implementation had weak statistical validation and unstable normali
 │   ├── src/
 │   ├── package.json
 │   └── Dockerfile
+├── notebooks/
+│   ├── Walmart_Model_Report.ipynb
+│   ├── Walmart_Model_Report.py
+│   └── outputs/
 ├── data/
 ├── artifacts/
 ├── scripts/train_model.py
@@ -95,6 +108,26 @@ Set API base if needed:
 export VITE_API_BASE_URL="http://localhost:8000"
 ```
 
+## Notebook Outputs (pybooks)
+
+Generate and refresh all report outputs:
+
+```bash
+source .venv/bin/activate
+python notebooks/Walmart_Model_Report.py
+```
+
+Open this notebook:
+- `notebooks/Walmart_Model_Report.ipynb`
+
+Generated report artifacts are saved in:
+- `notebooks/outputs/model_summary.json`
+- `notebooks/outputs/correlation_heatmap.html`
+- `notebooks/outputs/diagnostic_heatmap.html`
+- `notebooks/outputs/actual_vs_predicted.html`
+- `notebooks/outputs/feature_importance_rf.html`
+- `notebooks/outputs/residual_distribution.html`
+
 ## Docker Run
 
 ```bash
@@ -117,3 +150,8 @@ Before deploy, set env vars in Render dashboard:
 - `VITE_API_BASE_URL` on static frontend service to your API URL
 
 Then deploy using Render Blueprint from repo root.
+
+If your frontend URL still shows `Not Found`, check these in Render:
+- static service name exists (`walmart-sales-frontend`)
+- static rewrite route is active (`/* -> /index.html`)
+- latest deploy status is `Live`

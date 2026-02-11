@@ -82,6 +82,33 @@ def get_metrics():
     return {"metrics": bundle["metrics"], "diagnostics": bundle["diagnostics"]}
 
 
+@app.get("/api/v1/model-info")
+def model_info():
+    return {
+        "forecast_model": {
+            "name": "VotingRegressor",
+            "members": ["RandomForestRegressor", "GradientBoostingRegressor"],
+            "target": "Weekly_Sales",
+        },
+        "interpretable_model": {
+            "name": "OLS (statsmodels)",
+            "target_transform": "log1p(Weekly_Sales)",
+            "robust_errors": "HC3",
+        },
+        "engineered_features": [
+            "Month",
+            "Week",
+            "Year",
+            "Week_Sin",
+            "Week_Cos",
+            "Lag_1",
+            "Lag_4",
+            "Rolling_4_Mean",
+            "Rolling_8_Mean",
+        ],
+    }
+
+
 @app.post("/api/v1/predict", response_model=PredictionResponse)
 def predict_sales(payload: PredictionRequest):
     _, feat = _load_context()

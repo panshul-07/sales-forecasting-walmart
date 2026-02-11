@@ -1,0 +1,86 @@
+{
+  "model_used": {
+    "forecast_model": "VotingRegressor(RandomForestRegressor + GradientBoostingRegressor)",
+    "interpretable_model": "OLS (log1p target, HC3 robust errors)",
+    "features": [
+      "Store",
+      "Holiday_Flag",
+      "Temperature",
+      "Fuel_Price",
+      "CPI",
+      "Unemployment",
+      "Month",
+      "Week",
+      "Year",
+      "Week_Sin",
+      "Week_Cos",
+      "Lag_1",
+      "Lag_4",
+      "Rolling_4_Mean",
+      "Rolling_8_Mean"
+    ]
+  },
+  "metrics": {
+    "ensemble_train_r2": 0.9636947476240584,
+    "ensemble_test_r2": 0.912803150009587,
+    "ensemble_test_rmse": 8140.5379982913255,
+    "ensemble_test_mae": 6610.62661421837,
+    "ols_test_r2": 0.9112433258882024,
+    "ols_test_rmse": 8213.026416933133,
+    "ols_test_mae": 6646.0500880115915
+  },
+  "diagnostics": {
+    "normality": {
+      "jarque_bera_stat": 412.1689501218501,
+      "jarque_bera_p": 3.15246065604341e-90,
+      "omnibus_stat": 277.23814140296605,
+      "omnibus_p": 6.287854849652162e-61,
+      "shapiro_stat": 0.9851564379557338,
+      "shapiro_p": 3.338373296339312e-22,
+      "dagostino_k2_stat": 277.23814140296605,
+      "dagostino_k2_p": 6.287854849652162e-61,
+      "residual_skew": -0.4935242190889865,
+      "residual_kurtosis": 4.030115335054466
+    },
+    "heteroskedasticity": {
+      "breusch_pagan_stat": 367.2826358673093,
+      "breusch_pagan_p": 5.067868954750504e-69
+    },
+    "autocorrelation": {
+      "durbin_watson": 1.640654554514592,
+      "breusch_godfrey_stat": 451.4578550834078,
+      "breusch_godfrey_p": 9.271977364008044e-99,
+      "ljung_box_stat_lag10": 852.4189778237246,
+      "ljung_box_p_lag10": 1.101380727424215e-176
+    },
+    "specification": {
+      "ramsey_reset_f": 1110.4329168545507,
+      "ramsey_reset_p": 2.132454305855627e-219,
+      "residual_mean_t_stat": -1.8150680226330746e-09,
+      "residual_mean_t_p": 0.9999999985518597
+    },
+    "multicollinearity": {
+      "Store": 1.0171026688625073,
+      "Holiday_Flag": 3.433651969942099,
+      "Temperature": 4.404283214705477,
+      "Fuel_Price": 22.90380042879706,
+      "CPI": 15.016549519207137,
+      "Unemployment": 3.2629440347659084,
+      "Month": 147.16935389909335,
+      "Week": 157.9241314417091,
+      "Year": 50.33229436216752,
+      "Week_Sin": 8.067830317320343,
+      "Week_Cos": 2.1672591644721577,
+      "Lag_1": 20.3354215156379,
+      "Lag_4": 20.44357637246618,
+      "Rolling_4_Mean": 118.95495701784515,
+      "Rolling_8_Mean": 74.24337185861955
+    },
+    "fit": {
+      "r_squared": 0.8994872619679797,
+      "adj_r_squared": 0.8991760127791935,
+      "aic": -11301.524862664983,
+      "bic": -11197.70416319467
+    }
+  }
+}
