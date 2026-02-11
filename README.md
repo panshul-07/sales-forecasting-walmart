@@ -23,6 +23,8 @@ If a link returns `404`, trigger a Render redeploy and wait for the first succes
 - OLS target: `log1p(Weekly_Sales)`
 - OLS robust covariance: `HC3`
 - Feature set: store/economic variables + engineered seasonality + lag and rolling features
+- Full model + preprocessing + results report:
+  - `/Users/panshulaj/Documents/sales-forecasting-walmart/docs/MODEL_REPORT.md`
 
 ## Why this fixes the OLS issues
 
