@@ -11,10 +11,10 @@ services:
         value: 3.11.11
       - key: FRONTEND_URL
         sync: false
-  - type: static
+  - type: web
     name: walmart-sales-frontend
+    runtime: static
     rootDir: frontend
-    plan: free
     buildCommand: npm install && npm run build
     staticPublishPath: dist
     routes:
