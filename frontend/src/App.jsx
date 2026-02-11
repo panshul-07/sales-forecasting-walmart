@@ -136,6 +136,16 @@ export default function App() {
     return sum / history.length
   }, [history])
 
+  const lastActualSales = useMemo(() => {
+    if (!history.length) return 0
+    return Number(history[history.length - 1]?.actual_sales || 0)
+  }, [history])
+
+  const totalObservedSales = useMemo(() => {
+    if (!history.length) return 0
+    return history.reduce((acc, p) => acc + Number(p.actual_sales || 0), 0)
+  }, [history])
+
   const changeVsAverage = useMemo(() => {
     if (!prediction || !historyAverage) return null
     return ((prediction - historyAverage) / historyAverage) * 100
@@ -178,6 +188,20 @@ export default function App() {
       },
     ],
     [sensitivity, feature]
+  )
+
+  const actualPredictedScatter = useMemo(
+    () => [
+      {
+        x: history.map((p) => p.actual_sales),
+        y: history.map((p) => p.predicted_sales),
+        type: 'scatter',
+        mode: 'markers',
+        name: 'Observed points',
+        marker: { color: '#22D3EE', size: 8, opacity: 0.7 },
+      },
+    ],
+    [history]
   )
 
   return (
@@ -226,12 +250,19 @@ export default function App() {
       <section className="kpi-grid">
         <KpiCard label="Ensemble R2" value={number.format(metrics.ensemble_test_r2 || 0)} hint="Holdout accuracy" />
         <KpiCard label="Ensemble RMSE" value={currency.format(metrics.ensemble_test_rmse || 0)} hint="Prediction error" />
-        <KpiCard label="Current Forecast" value={currency.format(prediction || 0)} hint="From form inputs" />
+        <KpiCard label="Latest Actual Sale" value={currency.format(lastActualSales || 0)} hint="Most recent observed week" />
         <KpiCard
           label="Change vs Store Avg"
           value={changeVsAverage === null ? '—' : `${changeVsAverage.toFixed(2)}%`}
           hint={historyAverage ? `Store avg ${currency.format(historyAverage)}` : 'Run/load predictions'}
         />
+      </section>
+
+      <section className="kpi-grid">
+        <KpiCard label="Current Forecast" value={currency.format(prediction || 0)} hint="From form inputs" />
+        <KpiCard label="Observed Sales (52 weeks)" value={currency.format(totalObservedSales || 0)} hint="Total actual sales loaded" />
+        <KpiCard label="Selected Store" value={store || '—'} hint="Store number in focus" />
+        <KpiCard label="Actual Weekly Avg" value={currency.format(historyAverage || 0)} hint="Average observed weekly sales" />
       </section>
 
       <section className="grid-two">
@@ -282,6 +313,54 @@ export default function App() {
       <section className="grid-two">
         <article className="panel">
           <div className="panel-head">
+            <h2>Actual vs Predicted Scatter</h2>
+            <p>Observed weekly sales points for selected store</p>
+          </div>
+          <Plot
+            data={actualPredictedScatter}
+            layout={{
+              margin: { t: 10, r: 12, b: 46, l: 60 },
+              paper_bgcolor: 'rgba(0,0,0,0)',
+              plot_bgcolor: 'rgba(0,0,0,0)',
+              font: { color: '#E2E8F0' },
+              xaxis: { title: 'Actual Sales', gridcolor: 'rgba(148,163,184,0.2)' },
+              yaxis: { title: 'Predicted Sales', gridcolor: 'rgba(148,163,184,0.2)' },
+            }}
+            useResizeHandler
+            style={{ width: '100%', height: '340px' }}
+            config={{ responsive: true, displayModeBar: false }}
+          />
+        </article>
+
+        <article className="panel">
+          <div className="panel-head">
+            <h2>Model Summary</h2>
+            <p>Frontend keeps this concise. Full tests remain in notebooks.</p>
+          </div>
+          <div className="chips">
+            <span className="chip">{modelInfo?.forecast_model?.name || 'VotingRegressor'}</span>
+            {(modelInfo?.forecast_model?.members || []).map((m) => (
+              <span className="chip" key={m}>{m}</span>
+            ))}
+            <span className="chip">{modelInfo?.interpretable_model?.name || 'OLS'}</span>
+            <span className="chip">{modelInfo?.interpretable_model?.target_transform || 'log1p'}</span>
+            <span className="chip">{modelInfo?.interpretable_model?.robust_errors || 'HC3'}</span>
+          </div>
+
+          <p className="model-note">
+            Parametric tests (JB, Shapiro, BG, BP, RESET and others), preprocessing steps, and evidence outputs are documented in the
+            notebooks folder for submission.
+          </p>
+
+          <a className="btn btn-secondary" href={NOTEBOOK_URL} target="_blank" rel="noreferrer">
+            View Notebook + Outputs
+          </a>
+        </article>
+      </section>
+
+      <section className="grid-two">
+        <article className="panel">
+          <div className="panel-head">
             <h2>Forecast Inputs</h2>
             <p>Scenario simulator</p>
           </div>
@@ -315,31 +394,6 @@ export default function App() {
             </label>
             <button className="btn" type="submit" disabled={!store}>Run Forecast</button>
           </form>
-        </article>
-
-        <article className="panel">
-          <div className="panel-head">
-            <h2>Model Summary</h2>
-            <p>Frontend keeps this concise. Full tests remain in notebooks.</p>
-          </div>
-          <div className="chips">
-            <span className="chip">{modelInfo?.forecast_model?.name || 'VotingRegressor'}</span>
-            {(modelInfo?.forecast_model?.members || []).map((m) => (
-              <span className="chip" key={m}>{m}</span>
-            ))}
-            <span className="chip">{modelInfo?.interpretable_model?.name || 'OLS'}</span>
-            <span className="chip">{modelInfo?.interpretable_model?.target_transform || 'log1p'}</span>
-            <span className="chip">{modelInfo?.interpretable_model?.robust_errors || 'HC3'}</span>
-          </div>
-
-          <p className="model-note">
-            Parametric tests (JB, Shapiro, BG, BP, RESET and others), preprocessing steps, and evidence outputs are documented in the
-            notebooks folder for submission.
-          </p>
-
-          <a className="btn btn-secondary" href={NOTEBOOK_URL} target="_blank" rel="noreferrer">
-            View Notebook + Outputs
-          </a>
         </article>
       </section>
     </main>

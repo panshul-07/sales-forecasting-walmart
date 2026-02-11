@@ -34,8 +34,9 @@ origins = [
 ]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[x for x in origins if x],
-    allow_credentials=True,
+    allow_origins=[x for x in origins if x] or ["*"],
+    allow_origin_regex=r"https://.*\.onrender\.com",
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
