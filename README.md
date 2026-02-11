@@ -7,6 +7,14 @@ This project was refactored into a clean full-stack architecture with:
 - `artifacts/` for trained model bundles
 - `legacy/` for previous notebook + Streamlit code
 
+## Live Deployment
+
+- Frontend URL (after deploy): `https://walmart-sales-frontend.onrender.com`
+- Backend API URL (after deploy): `https://walmart-sales-api.onrender.com`
+- API Docs (after deploy): `https://walmart-sales-api.onrender.com/docs`
+
+If a link returns `404`, trigger a Render redeploy and wait for the first successful build before sharing the URL publicly.
+
 ## Why this fixes the OLS issues
 
 The previous implementation had weak statistical validation and unstable normality behavior (high kurtosis / poor JB results). The new pipeline improves this through:
@@ -109,4 +117,3 @@ Before deploy, set env vars in Render dashboard:
 - `VITE_API_BASE_URL` on static frontend service to your API URL
 
 Then deploy using Render Blueprint from repo root.
-
